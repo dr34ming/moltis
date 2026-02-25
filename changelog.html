@@ -215,6 +215,8 @@ onboarding-ready configs.</li>
 <li>GraphQL <code>logs.ack</code> mutation now matches backend behavior and no longer takes an <code>ids</code> argument</li>
 <li>Providers now support <code>stream_transport = "sse" | "websocket" | "auto"</code> in config. OpenAI can stream via Responses API WebSocket mode, and <code>auto</code> falls back to SSE when WebSocket setup is unavailable.</li>
 <li>Agent Identity emoji picker now includes 🐰 🐹 🦀 🦞 🦝 🦭 🧠 🧭 options</li>
+<li>Default sandbox package set now includes <code>golang-go</code>, and pre-built sandbox images install the latest <code>gog</code> (<code>steipete/gogcli</code>) as <code>gog</code> and <code>gogcli</code></li>
+<li>Sandbox config now supports <code>/home/sandbox</code> persistence strategies (<code>off</code>, <code>session</code>, <code>shared</code>), with <code>shared</code> as the default and a shared host folder mounted from <code>data_dir()/sandbox/home/shared</code></li>
 </ul>
 <h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
 <h3 id="removed"><a class="header" href="#removed">Removed</a></h3>

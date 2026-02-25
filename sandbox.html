@@ -237,6 +237,19 @@ workloads.</p>
 <h2 id="per-session-overrides"><a class="header" href="#per-session-overrides">Per-session overrides</a></h2>
 <p>The web UI allows toggling sandboxing per session and selecting a custom
 container image. These overrides persist across gateway restarts.</p>
+<h2 id="home-persistence"><a class="header" href="#home-persistence">Home persistence</a></h2>
+<p>By default, <code>/home/sandbox</code> is persisted in a shared host folder so that CLI
+auth/config files survive container recreation. You can change this with
+<code>home_persistence</code>:</p>
+<pre><code class="language-toml">[tools.exec.sandbox]
+home_persistence = "session"   # "off", "session", or "shared" (default)
+</code></pre>
+<ul>
+<li><code>off</code>: no home mount, container home is ephemeral</li>
+<li><code>session</code>: mount a per-session host folder to <code>/home/sandbox</code></li>
+<li><code>shared</code>: mount one shared host folder to <code>/home/sandbox</code> for all sessions</li>
+</ul>
+<p>Moltis stores persisted homes under <code>data_dir()/sandbox/home/</code>.</p>
 <h2 id="resource-limits"><a class="header" href="#resource-limits">Resource limits</a></h2>
 <pre><code class="language-toml">[tools.exec.sandbox.resource_limits]
 memory_limit = "512M"

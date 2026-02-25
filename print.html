@@ -709,6 +709,7 @@ priority_models = ["gpt-5.2"]
 mode = "all"                    # "off", "non-main", or "all"
 scope = "session"               # "command", "session", or "global"
 workspace_mount = "ro"          # "ro", "rw", or "none"
+home_persistence = "shared"     # "off", "session", or "shared" (default: "shared")
 backend = "auto"                # "auto", "docker", or "apple-container"
 no_network = true
 
@@ -721,6 +722,7 @@ packages = [
     "python3-pip",
     "nodejs",
     "npm",
+    "golang-go",
 ]
 </code></pre>
 <div id="admonition-info" class="admonition admonish-info" role="note" aria-labelledby="admonition-info-title">
@@ -905,9 +907,10 @@ offered = ["openai", "anthropic", "local-llm"]
 mode = "all"
 scope = "session"
 workspace_mount = "ro"
+home_persistence = "session"
 backend = "auto"
 no_network = true
-packages = ["curl", "git", "jq", "python3", "nodejs"]
+packages = ["curl", "git", "jq", "python3", "nodejs", "golang-go"]
 
 [memory]
 backend = "builtin"
@@ -2431,6 +2434,19 @@ workloads.</p>
 <h2 id="per-session-overrides"><a class="header" href="#per-session-overrides">Per-session overrides</a></h2>
 <p>The web UI allows toggling sandboxing per session and selecting a custom
 container image. These overrides persist across gateway restarts.</p>
+<h2 id="home-persistence"><a class="header" href="#home-persistence">Home persistence</a></h2>
+<p>By default, <code>/home/sandbox</code> is persisted in a shared host folder so that CLI
+auth/config files survive container recreation. You can change this with
+<code>home_persistence</code>:</p>
+<pre><code class="language-toml">[tools.exec.sandbox]
+home_persistence = "session"   # "off", "session", or "shared" (default)
+</code></pre>
+<ul>
+<li><code>off</code>: no home mount, container home is ephemeral</li>
+<li><code>session</code>: mount a per-session host folder to <code>/home/sandbox</code></li>
+<li><code>shared</code>: mount one shared host folder to <code>/home/sandbox</code> for all sessions</li>
+</ul>
+<p>Moltis stores persisted homes under <code>data_dir()/sandbox/home/</code>.</p>
 <h2 id="resource-limits"><a class="header" href="#resource-limits">Resource limits</a></h2>
 <pre><code class="language-toml">[tools.exec.sandbox.resource_limits]
 memory_limit = "512M"
@@ -6514,6 +6530,8 @@ onboarding-ready configs.</li>
 <li>GraphQL <code>logs.ack</code> mutation now matches backend behavior and no longer takes an <code>ids</code> argument</li>
 <li>Providers now support <code>stream_transport = "sse" | "websocket" | "auto"</code> in config. OpenAI can stream via Responses API WebSocket mode, and <code>auto</code> falls back to SSE when WebSocket setup is unavailable.</li>
 <li>Agent Identity emoji picker now includes 🐰 🐹 🦀 🦞 🦝 🦭 🧠 🧭 options</li>
+<li>Default sandbox package set now includes <code>golang-go</code>, and pre-built sandbox images install the latest <code>gog</code> (<code>steipete/gogcli</code>) as <code>gog</code> and <code>gogcli</code></li>
+<li>Sandbox config now supports <code>/home/sandbox</code> persistence strategies (<code>off</code>, <code>session</code>, <code>shared</code>), with <code>shared</code> as the default and a shared host folder mounted from <code>data_dir()/sandbox/home/shared</code></li>
 </ul>
 <h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
 <h3 id="removed"><a class="header" href="#removed">Removed</a></h3>
