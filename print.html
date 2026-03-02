@@ -8389,12 +8389,187 @@ let removed_count = registry.unregister_mcp();
 </code></pre>
 <p>The <code>source</code> and <code>mcpServer</code> fields are available to the UI for rendering
 tools grouped by origin.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="agent-presets"><a class="header" href="#agent-presets">Agent Presets</a></h1>
+<p>Agent presets let <code>spawn_agent</code> run sub-agents with role-specific configuration.
+Use them to control model cost, tool access, session visibility, and behavior.</p>
+<h2 id="quick-start-3"><a class="header" href="#quick-start-3">Quick Start</a></h2>
+<pre><code class="language-toml">[agents.presets.researcher]
+identity.name = "scout"
+identity.emoji = "🔍"
+identity.theme = "thorough and methodical"
+model = "anthropic/claude-haiku-3-5-20241022"
+tools.allow = ["read_file", "glob", "grep", "web_search", "web_fetch"]
+tools.deny = ["exec", "write_file"]
+system_prompt_suffix = "Gather facts and report clearly."
+
+[agents.presets.coordinator]
+identity.name = "orchestrator"
+delegate_only = true
+tools.allow = ["spawn_agent", "sessions_list", "sessions_history", "sessions_send", "task_list"]
+sessions.can_send = true
+</code></pre>
+<p>Then call <code>spawn_agent</code> with a preset:</p>
+<pre><code class="language-json">{
+  "task": "Find all auth-related code paths",
+  "preset": "researcher"
+}
+</code></pre>
+<h2 id="config-fields"><a class="header" href="#config-fields">Config Fields</a></h2>
+<p>Top-level:</p>
+<ul>
+<li><code>[agents] default_preset</code> (optional preset name)</li>
+<li><code>[agents] presets</code> (map of named presets)</li>
+</ul>
+<p>Per preset (<code>[agents.presets.&lt;name&gt;]</code>):</p>
+<ul>
+<li><code>identity.name</code>, <code>identity.emoji</code>, <code>identity.theme</code></li>
+<li><code>model</code></li>
+<li><code>tools.allow</code>, <code>tools.deny</code></li>
+<li><code>system_prompt_suffix</code></li>
+<li><code>max_iterations</code>, <code>timeout_secs</code></li>
+<li><code>sessions.*</code> access policy</li>
+<li><code>memory.scope</code>, <code>memory.max_lines</code></li>
+<li><code>delegate_only</code></li>
+</ul>
+<h2 id="tool-policy-behavior"><a class="header" href="#tool-policy-behavior">Tool Policy Behavior</a></h2>
+<ul>
+<li>If <code>tools.allow</code> is empty, all tools start as allowed.</li>
+<li>If <code>tools.allow</code> is non-empty, only those tools are allowed.</li>
+<li><code>tools.deny</code> is applied after allow-list filtering.</li>
+<li>For normal sub-agents, <code>spawn_agent</code> is always removed to avoid recursive runaway spawning.</li>
+<li>For <code>delegate_only = true</code>, the registry is restricted to delegation/session tools:
+<code>spawn_agent</code>, <code>sessions_list</code>, <code>sessions_history</code>, <code>sessions_send</code>, <code>task_list</code>.</li>
+</ul>
+<h2 id="session-access-policy"><a class="header" href="#session-access-policy">Session Access Policy</a></h2>
+<p><code>sessions</code> policy controls what a preset can see/send across sessions:</p>
+<ul>
+<li><code>key_prefix</code>: optional session-key prefix filter</li>
+<li><code>allowed_keys</code>: explicit allow-list</li>
+<li><code>can_send</code>: allow/disallow <code>sessions_send</code></li>
+<li><code>cross_agent</code>: permit cross-agent session access</li>
+</ul>
+<p>See <a href="session-tools.html">Session Tools</a> for full details.</p>
+<h2 id="per-agent-memory"><a class="header" href="#per-agent-memory">Per-Agent Memory</a></h2>
+<p>Each preset can have persistent memory loaded from a <code>MEMORY.md</code> file at spawn
+time. The memory content is injected into the sub-agent system prompt.</p>
+<ul>
+<li><code>memory.scope</code> determines where the file is stored:
+<ul>
+<li><code>user</code> (default): <code>~/.moltis/agent-memory/&lt;preset&gt;/MEMORY.md</code></li>
+<li><code>project</code>: <code>.moltis/agent-memory/&lt;preset&gt;/MEMORY.md</code></li>
+<li><code>local</code>: <code>.moltis/agent-memory-local/&lt;preset&gt;/MEMORY.md</code></li>
+</ul>
+</li>
+<li><code>memory.max_lines</code> limits how much is injected (default: 200).</li>
+</ul>
+<p>The directory is created automatically so agents can write to it.</p>
+<pre><code class="language-toml">[agents.presets.researcher.memory]
+scope = "project"
+max_lines = 100
+</code></pre>
+<h2 id="model-selection-order"><a class="header" href="#model-selection-order">Model Selection Order</a></h2>
+<p>When <code>spawn_agent</code> runs, model choice is:</p>
+<ol>
+<li>Explicit <code>model</code> parameter in tool call</li>
+<li>Preset <code>model</code></li>
+<li>Parent/default provider model</li>
+</ol>
+<h2 id="markdown-agent-definitions"><a class="header" href="#markdown-agent-definitions">Markdown Agent Definitions</a></h2>
+<p>Presets can also be defined as markdown files with YAML frontmatter, discovered from:</p>
+<ul>
+<li><code>~/.moltis/agents/*.md</code> (user-global)</li>
+<li><code>.moltis/agents/*.md</code> (project-local)</li>
+</ul>
+<p>Project-local files override user-global files with the same <code>name</code>.
+TOML presets always take precedence over markdown definitions.</p>
+<p>Example <code>~/.moltis/agents/reviewer.md</code>:</p>
+<pre><code class="language-markdown">---
+name: reviewer
+tools: Read, Grep, Glob
+model: sonnet
+emoji: 🔍
+theme: focused and efficient
+max_iterations: 20
+timeout_secs: 60
+---
+You are a code reviewer. Focus on correctness and security.
+</code></pre>
+<p>Frontmatter fields: <code>name</code> (required), <code>tools</code>, <code>deny_tools</code>, <code>model</code>, <code>emoji</code>,
+<code>theme</code>, <code>delegate_only</code>, <code>max_iterations</code>, <code>timeout_secs</code>.
+The markdown body becomes <code>system_prompt_suffix</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="session-tools"><a class="header" href="#session-tools">Session Tools</a></h1>
+<p>Session tools enable persistent, asynchronous coordination between agent sessions.</p>
+<h2 id="available-tools"><a class="header" href="#available-tools">Available Tools</a></h2>
+<h3 id="sessions_list"><a class="header" href="#sessions_list"><code>sessions_list</code></a></h3>
+<p>List sessions visible to the current policy.</p>
+<p>Input:</p>
+<pre><code class="language-json">{
+  "filter": "optional text",
+  "limit": 20
+}
+</code></pre>
+<h3 id="sessions_history"><a class="header" href="#sessions_history"><code>sessions_history</code></a></h3>
+<p>Read message history from a target session.</p>
+<p>Input:</p>
+<pre><code class="language-json">{
+  "key": "agent:research:main",
+  "limit": 20,
+  "offset": 0
+}
+</code></pre>
+<h3 id="sessions_send"><a class="header" href="#sessions_send"><code>sessions_send</code></a></h3>
+<p>Send a message to another session, optionally waiting for reply.</p>
+<pre><code class="language-json">{
+  "key": "agent:coder:main",
+  "message": "Please implement JWT middleware",
+  "wait_for_reply": true,
+  "context": "coordinator"
+}
+</code></pre>
+<h2 id="session-access-policy-1"><a class="header" href="#session-access-policy-1">Session Access Policy</a></h2>
+<p>Configure policy in a preset to control what sessions a sub-agent can access:</p>
+<pre><code class="language-toml">[agents.presets.coordinator]
+tools.allow = ["sessions_list", "sessions_history", "sessions_send", "task_list", "spawn_agent"]
+sessions.can_send = true
+
+[agents.presets.observer]
+tools.allow = ["sessions_list", "sessions_history"]
+sessions.key_prefix = "agent:research:"
+sessions.can_send = false
+</code></pre>
+<p>Policy fields:</p>
+<ul>
+<li><code>key_prefix</code>: restrict visibility by session-key prefix</li>
+<li><code>allowed_keys</code>: extra explicit session keys</li>
+<li><code>can_send</code>: controls <code>sessions_send</code> (default: <code>true</code>)</li>
+<li><code>cross_agent</code>: allow access to sessions owned by other agents (default: <code>false</code>)</li>
+</ul>
+<p>When no policy is configured, all sessions are visible and sendable.</p>
+<h2 id="coordination-patterns"><a class="header" href="#coordination-patterns">Coordination Patterns</a></h2>
+<p>Use <code>spawn_agent</code> when work is short-lived and synchronous.</p>
+<p>Use session tools when you need:</p>
+<ul>
+<li>long-lived specialist sessions</li>
+<li>handoffs with durable history</li>
+<li>asynchronous team-style orchestration</li>
+</ul>
+<p>Common coordinator flow:</p>
+<ol>
+<li><code>sessions_list</code> to discover workers</li>
+<li><code>sessions_history</code> to inspect progress</li>
+<li><code>sessions_send</code> to dispatch next tasks</li>
+<li><code>task_list</code> to track cross-session work items</li>
+</ol>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
 <p>All notable changes to this project will be documented in this file.</p>
 <p>The format is based on <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>,
 and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 <h2 id="unreleased"><a class="header" href="#unreleased">[Unreleased]</a></h2>
 <h3 id="added"><a class="header" href="#added">Added</a></h3>
+<ul>
+<li><strong>macOS settings backend</strong>: all settings panels (Identity, Heartbeat, Memory, Security, Tailscale, Monitoring, GraphQL, Sandbox, Voice, Channels, Hooks, MCP, Skills) now load from and persist to the Rust config backend via 6 new FFI functions (<code>moltis_get_config</code>, <code>moltis_save_config</code>, <code>moltis_get_soul</code>, <code>moltis_save_soul</code>, <code>moltis_save_identity</code>, <code>moltis_save_user_profile</code>)</li>
+<li><strong>macOS environment variables settings</strong>: Settings &gt; Environment now supports add/update/delete via the same credential-store path as web UI (<code>moltis_list_env_vars</code>, <code>moltis_set_env_var</code>, <code>moltis_delete_env_var</code>), including encrypted/plaintext status and vault-state messaging</li>
+</ul>
 <h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
 <h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
 <h3 id="removed"><a class="header" href="#removed">Removed</a></h3>
