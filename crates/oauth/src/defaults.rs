@@ -13,6 +13,7 @@ fn builtin_defaults() -> HashMap<String, OAuthConfig> {
         auth_url: "https://github.com/login/device/code".into(),
         token_url: "https://github.com/login/oauth/access_token".into(),
         redirect_uri: String::new(),
+        resource: None,
         scopes: vec![],
         extra_auth_params: vec![],
         device_flow: true,
@@ -22,6 +23,7 @@ fn builtin_defaults() -> HashMap<String, OAuthConfig> {
         auth_url: "https://auth.kimi.com/api/oauth/device_authorization".into(),
         token_url: "https://auth.kimi.com/api/oauth/token".into(),
         redirect_uri: String::new(),
+        resource: None,
         scopes: vec![],
         extra_auth_params: vec![],
         device_flow: true,
@@ -31,6 +33,7 @@ fn builtin_defaults() -> HashMap<String, OAuthConfig> {
         auth_url: "https://auth.openai.com/oauth/authorize".into(),
         token_url: "https://auth.openai.com/oauth/token".into(),
         redirect_uri: "http://localhost:1455/auth/callback".into(),
+        resource: None,
         scopes: vec![
             "openid".into(),
             "profile".into(),
@@ -52,6 +55,7 @@ fn builtin_defaults() -> HashMap<String, OAuthConfig> {
         auth_url: "https://accounts.google.com/o/oauth2/v2/auth".into(),
         token_url: "https://oauth2.googleapis.com/token".into(),
         redirect_uri: "http://localhost:1456/auth/callback".into(),
+        resource: None,
         scopes: vec![
             // Scope for Gemini API access
             "https://www.googleapis.com/auth/generative-language.retriever".into(),
@@ -120,6 +124,7 @@ pub fn callback_port(config: &OAuthConfig) -> u16 {
         .unwrap_or(1455)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

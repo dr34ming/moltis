@@ -5,7 +5,6 @@ use std::{
 };
 
 use {
-    anyhow::Result,
     async_trait::async_trait,
     secrecy::ExposeSecret,
     teloxide::prelude::Requester,
@@ -13,9 +12,11 @@ use {
 };
 
 use moltis_channels::{
-    ChannelEventSink,
+    ChannelEventSink, Error as ChannelError, Result as ChannelResult,
     message_log::MessageLog,
-    plugin::{ChannelHealthSnapshot, ChannelOutbound, ChannelPlugin, ChannelStatus},
+    plugin::{
+        ChannelHealthSnapshot, ChannelOutbound, ChannelPlugin, ChannelStatus, ChannelStreamOutbound,
+    },
 };
 
 use crate::{
@@ -60,7 +61,14 @@ impl TelegramPlugin {
     }
 
     /// Get a shared reference to the outbound sender (for use outside the plugin).
-    pub fn shared_outbound(&self) -> Arc<dyn moltis_channels::ChannelOutbound> {
+    pub fn shared_outbound(&self) -> Arc<dyn ChannelOutbound> {
+        Arc::new(TelegramOutbound {
+            accounts: Arc::clone(&self.accounts),
+        })
+    }
+
+    /// Get a shared reference to streaming outbound sender.
+    pub fn shared_stream_outbound(&self) -> Arc<dyn ChannelStreamOutbound> {
         Arc::new(TelegramOutbound {
             accounts: Arc::clone(&self.accounts),
         })
@@ -68,13 +76,18 @@ impl TelegramPlugin {
 
     /// List all active account IDs.
     pub fn account_ids(&self) -> Vec<String> {
-        let accounts = self.accounts.read().unwrap();
+        let accounts = self.accounts.read().unwrap_or_else(|e| e.into_inner());
         accounts.keys().cloned().collect()
+    }
+
+    pub fn has_account(&self, account_id: &str) -> bool {
+        let accounts = self.accounts.read().unwrap_or_else(|e| e.into_inner());
+        accounts.contains_key(account_id)
     }
 
     /// Get the config for a specific account (serialized to JSON).
     pub fn account_config(&self, account_id: &str) -> Option<serde_json::Value> {
-        let accounts = self.accounts.read().unwrap();
+        let accounts = self.accounts.read().unwrap_or_else(|e| e.into_inner());
         accounts
             .get(account_id)
             .and_then(|s| serde_json::to_value(&s.config).ok())
@@ -83,24 +96,28 @@ impl TelegramPlugin {
     /// Update the in-memory config for an account without restarting the
     /// polling loop.  Use for allowlist changes that don't need
     /// re-authentication or bot restart.
-    pub fn update_account_config(&self, account_id: &str, config: serde_json::Value) -> Result<()> {
+    pub fn update_account_config(
+        &self,
+        account_id: &str,
+        config: serde_json::Value,
+    ) -> ChannelResult<()> {
         let tg_config: TelegramAccountConfig = serde_json::from_value(config)?;
-        let mut accounts = self.accounts.write().unwrap();
+        let mut accounts = self.accounts.write().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = accounts.get_mut(account_id) {
             state.config = tg_config;
             Ok(())
         } else {
-            Err(anyhow::anyhow!("account not found: {account_id}"))
+            Err(ChannelError::unknown_account(account_id))
         }
     }
 
     /// List pending OTP challenges for a specific account.
     pub fn pending_otp_challenges(&self, account_id: &str) -> Vec<crate::otp::OtpChallengeInfo> {
-        let accounts = self.accounts.read().unwrap();
+        let accounts = self.accounts.read().unwrap_or_else(|e| e.into_inner());
         accounts
             .get(account_id)
             .map(|s| {
-                let otp = s.otp.lock().unwrap();
+                let otp = s.otp.lock().unwrap_or_else(|e| e.into_inner());
                 otp.list_pending()
             })
             .unwrap_or_default()
@@ -123,11 +140,17 @@ impl ChannelPlugin for TelegramPlugin {
         "Telegram"
     }
 
-    async fn start_account(&mut self, account_id: &str, config: serde_json::Value) -> Result<()> {
+    async fn start_account(
+        &mut self,
+        account_id: &str,
+        config: serde_json::Value,
+    ) -> ChannelResult<()> {
         let tg_config: TelegramAccountConfig = serde_json::from_value(config)?;
 
         if tg_config.token.expose_secret().is_empty() {
-            return Err(anyhow::anyhow!("telegram bot token is required"));
+            return Err(ChannelError::invalid_input(
+                "telegram bot token is required",
+            ));
         }
 
         info!(account_id, "starting telegram account");
@@ -139,21 +162,22 @@ impl ChannelPlugin for TelegramPlugin {
             self.message_log.clone(),
             self.event_sink.clone(),
         )
-        .await?;
+        .await
+        .map_err(|e| ChannelError::unavailable(format!("start telegram polling: {e}")))?;
 
         Ok(())
     }
 
-    async fn stop_account(&mut self, account_id: &str) -> Result<()> {
+    async fn stop_account(&mut self, account_id: &str) -> ChannelResult<()> {
         let cancel = {
-            let accounts = self.accounts.read().unwrap();
+            let accounts = self.accounts.read().unwrap_or_else(|e| e.into_inner());
             accounts.get(account_id).map(|s| s.cancel.clone())
         };
 
         if let Some(cancel) = cancel {
             info!(account_id, "stopping telegram account");
             cancel.cancel();
-            let mut accounts = self.accounts.write().unwrap();
+            let mut accounts = self.accounts.write().unwrap_or_else(|e| e.into_inner());
             accounts.remove(account_id);
         } else {
             warn!(account_id, "telegram account not found");
@@ -173,7 +197,7 @@ impl ChannelPlugin for TelegramPlugin {
 
 #[async_trait]
 impl ChannelStatus for TelegramPlugin {
-    async fn probe(&self, account_id: &str) -> Result<ChannelHealthSnapshot> {
+    async fn probe(&self, account_id: &str) -> ChannelResult<ChannelHealthSnapshot> {
         // Return cached result if fresh enough.
         if let Ok(cache) = self.probe_cache.read()
             && let Some((snap, ts)) = cache.get(account_id)
@@ -183,7 +207,7 @@ impl ChannelStatus for TelegramPlugin {
         }
 
         let bot = {
-            let accounts = self.accounts.read().unwrap();
+            let accounts = self.accounts.read().unwrap_or_else(|e| e.into_inner());
             accounts.get(account_id).map(|s| s.bot.clone())
         };
 
@@ -218,6 +242,7 @@ impl ChannelStatus for TelegramPlugin {
     }
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use {
