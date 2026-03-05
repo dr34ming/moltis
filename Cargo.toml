@@ -17,6 +17,7 @@ default-members = [
   "crates/discord",
   "crates/gateway",
   "crates/graphql",
+  "crates/matrix",
   "crates/mcp",
   "crates/media",
   "crates/memory",
@@ -69,6 +70,7 @@ members = [
   "crates/cron",
   "crates/gateway",
   "crates/graphql",
+  "crates/matrix",
   "crates/mcp",
   "crates/media",
   "crates/memory",
@@ -299,6 +301,7 @@ moltis-common          = { path = "crates/common" }
 moltis-config          = { path = "crates/config" }
 moltis-cron            = { path = "crates/cron" }
 moltis-discord         = { path = "crates/discord" }
+moltis-matrix          = { path = "crates/matrix" }
 moltis-gateway         = { default-features = false, path = "crates/gateway" }
 moltis-graphql         = { path = "crates/graphql" }
 moltis-mcp             = { path = "crates/mcp" }

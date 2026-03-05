@@ -1,0 +1,21 @@
+[package]
+edition.workspace = true
+name              = "moltis-matrix"
+version.workspace = true
+
+[dependencies]
+moltis-channels = { path = "../channels" }
+moltis-common   = { path = "../common" }
+matrix-sdk      = { version = "0.16", default-features = false, features = ["markdown", "native-tls"] }
+
+async-trait  = "0.1"
+secrecy      = { version = "0.8", features = ["serde"] }
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+thiserror    = "2"
+tokio        = { version = "1", features = ["rt", "macros", "sync", "time"] }
+tokio-util   = { version = "0.7", features = ["rt"] }
+tracing      = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

@@ -35,6 +35,7 @@ moltis-common          = { workspace = true }
 moltis-config          = { workspace = true }
 moltis-cron            = { workspace = true }
 moltis-discord         = { workspace = true }
+moltis-matrix          = { workspace = true, optional = true }
 moltis-graphql         = { optional = true, workspace = true }
 moltis-mcp             = { workspace = true }
 moltis-media           = { workspace = true }
@@ -113,6 +114,7 @@ default = [
   "prometheus",
   "push-notifications",
   "qmd",
+  "matrix",
   "slack",
   "tailscale",
   "tls",
@@ -149,6 +151,7 @@ openclaw-import = ["dep:moltis-openclaw-import"]
 prometheus = ["metrics", "moltis-metrics/prometheus"]
 push-notifications = ["dep:chrono", "dep:p256", "dep:web-push", "moltis-chat/push-notifications"]
 qmd = ["dep:moltis-qmd"]
+matrix = ["dep:moltis-matrix"]
 slack = ["dep:moltis-slack", "moltis-slack/metrics"]
 tailscale = ["dep:moltis-tailscale"]
 tls = [

@@ -2716,6 +2716,18 @@ pub async fn prepare_gateway(
             .register(discord_plugin as Arc<tokio::sync::RwLock<dyn ChannelPlugin>>)
             .await;
 
+        #[cfg(feature = "matrix")]
+        {
+            let matrix_plugin = Arc::new(tokio::sync::RwLock::new(
+                moltis_matrix::MatrixPlugin::new()
+                    .with_message_log(Arc::clone(&message_log))
+                    .with_event_sink(Arc::clone(&channel_sink)),
+            ));
+            registry
+                .register(matrix_plugin as Arc<tokio::sync::RwLock<dyn ChannelPlugin>>)
+                .await;
+        }
+
         #[cfg(feature = "whatsapp")]
         {
             let wa_data_dir = data_dir.join("whatsapp");
