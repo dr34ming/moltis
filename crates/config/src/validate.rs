@@ -545,6 +545,7 @@ fn build_schema_map() -> KnownKeys {
                             "openai",
                             Struct(HashMap::from([
                                 ("api_key", Leaf),
+                                ("base_url", Leaf),
                                 ("voice", Leaf),
                                 ("model", Leaf),
                             ])),
@@ -580,6 +581,7 @@ fn build_schema_map() -> KnownKeys {
                             "whisper",
                             Struct(HashMap::from([
                                 ("api_key", Leaf),
+                                ("base_url", Leaf),
                                 ("model", Leaf),
                                 ("language", Leaf),
                             ])),
