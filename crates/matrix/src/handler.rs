@@ -3,11 +3,13 @@ use std::sync::Arc;
 use {
     matrix_sdk::{
         Room,
+        media::{MediaFormat, MediaRequestParameters},
         ruma::{
             OwnedUserId,
             events::room::{
                 member::StrippedRoomMemberEvent,
                 message::{MessageType, OriginalSyncRoomMessageEvent},
+                MediaSource,
             },
         },
     },
@@ -19,7 +21,7 @@ use moltis_channels::{
     gating::DmPolicy,
     message_log::MessageLogEntry,
     otp::{OtpInitResult, OtpVerifyResult},
-    plugin::{ChannelEventSink, ChannelMessageKind, ChannelMessageMeta, ChannelReplyTarget},
+    plugin::{ChannelAttachment, ChannelEventSink, ChannelMessageKind, ChannelMessageMeta, ChannelReplyTarget},
 };
 
 use crate::{
@@ -42,18 +44,31 @@ pub async fn handle_room_message(
     let sender_id = ev.sender.to_string();
     let event_id = ev.event_id.to_string();
 
-    let (body, kind) = match &ev.content.msgtype {
-        MessageType::Text(text) => (text.body.clone(), ChannelMessageKind::Text),
-        MessageType::Notice(notice) => (notice.body.clone(), ChannelMessageKind::Text),
-        MessageType::Image(_) => (String::new(), ChannelMessageKind::Photo),
-        MessageType::Audio(_) => (String::new(), ChannelMessageKind::Audio),
-        MessageType::Video(_) => (String::new(), ChannelMessageKind::Video),
-        MessageType::File(_) => (String::new(), ChannelMessageKind::Document),
-        MessageType::Location(_) => (String::new(), ChannelMessageKind::Location),
+    let (body, kind, attachments) = match &ev.content.msgtype {
+        MessageType::Text(text) => (text.body.clone(), ChannelMessageKind::Text, Vec::new()),
+        MessageType::Notice(notice) => (notice.body.clone(), ChannelMessageKind::Text, Vec::new()),
+        MessageType::Image(img) => {
+            let caption = img.body.clone();
+            let media_type = img.info.as_ref()
+                .and_then(|i| i.mimetype.clone())
+                .unwrap_or_else(|| "image/jpeg".to_string());
+            let att = match download_matrix_media(&room, &img.source, &media_type).await {
+                Ok(a) => vec![a],
+                Err(e) => {
+                    warn!("failed to download image from Matrix: {e}");
+                    Vec::new()
+                }
+            };
+            (caption, ChannelMessageKind::Photo, att)
+        }
+        MessageType::Audio(_) => (String::new(), ChannelMessageKind::Audio, Vec::new()),
+        MessageType::Video(_) => (String::new(), ChannelMessageKind::Video, Vec::new()),
+        MessageType::File(_) => (String::new(), ChannelMessageKind::Document, Vec::new()),
+        MessageType::Location(_) => (String::new(), ChannelMessageKind::Location, Vec::new()),
         _ => return,
     };
 
-    if body.is_empty() && matches!(kind, ChannelMessageKind::Text) {
+    if body.is_empty() && attachments.is_empty() && matches!(kind, ChannelMessageKind::Text) {
         return;
     }
 
@@ -151,7 +166,11 @@ pub async fn handle_room_message(
             access_granted: true,
         }).await;
 
-        sink.dispatch_to_chat(&body, reply_to, meta).await;
+        if attachments.is_empty() {
+            sink.dispatch_to_chat(&body, reply_to, meta).await;
+        } else {
+            sink.dispatch_to_chat_with_attachments(&body, attachments, reply_to, meta).await;
+        }
     }
 }
 
@@ -290,4 +309,21 @@ fn unix_now() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
+}
+
+async fn download_matrix_media(
+    room: &Room,
+    source: &MediaSource,
+    media_type: &str,
+) -> Result<ChannelAttachment, matrix_sdk::Error> {
+    let request = MediaRequestParameters {
+        source: source.clone(),
+        format: MediaFormat::File,
+    };
+    let data = room.client().media().get_media_content(&request, false).await?;
+    info!(size = data.len(), media_type, "downloaded image from Matrix");
+    Ok(ChannelAttachment {
+        media_type: media_type.to_string(),
+        data,
+    })
 }
