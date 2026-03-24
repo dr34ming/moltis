@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use {
     async_trait::async_trait,
+    base64::{Engine as _, engine::general_purpose::STANDARD as BASE64},
     matrix_sdk::ruma::{
         self,
         events::{
@@ -97,7 +98,30 @@ impl ChannelOutbound for MatrixOutbound {
         }
 
         if let Some(media) = &payload.media {
-            debug!(account_id, url = %media.url, "media attachment (URL-based upload not yet implemented)");
+            if media.url.starts_with("data:") {
+                if let Some(comma_pos) = media.url.find(',') {
+                    let header = &media.url[5..comma_pos];
+                    let mime_str = header.split(';').next().unwrap_or("application/octet-stream");
+                    if let Ok(bytes) = BASE64.decode(&media.url[comma_pos + 1..]) {
+                        let content_type: mime::Mime = mime_str.parse().unwrap_or(mime::APPLICATION_OCTET_STREAM);
+                        let filename = format!("image.{}", mime_to_extension(mime_str));
+                        let mut config = matrix_sdk::attachment::AttachmentConfig::new();
+                        if let Some(reply_id) = _reply_to {
+                            if let Ok(eid) = reply_id.parse::<OwnedEventId>() {
+                                config.reply = Some(matrix_sdk::room::reply::Reply {
+                                    event_id: eid,
+                                    enforce_thread: matrix_sdk::room::reply::EnforceThread::MaybeThreaded,
+                                });
+                            }
+                        }
+                        room.send_attachment(&filename, &content_type, bytes, config)
+                            .await
+                            .map_err(|e| ChannelError::external("matrix send_media image", e))?;
+                    }
+                }
+            } else {
+                warn!(account_id, url = %media.url, "non-data-URI media not supported for Matrix upload");
+            }
         }
 
         Ok(())
@@ -315,4 +339,13 @@ fn html_to_plain(html: &str) -> String {
         .replace("</em>", "_")
         .replace("<code>", "`")
         .replace("</code>", "`")
+}
+
+fn mime_to_extension(mime: &str) -> &'static str {
+    match mime {
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        _ => "jpg",
+    }
 }

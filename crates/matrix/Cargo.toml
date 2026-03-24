@@ -6,7 +6,10 @@ version.workspace = true
 [dependencies]
 moltis-channels = { path = "../channels" }
 moltis-common   = { path = "../common" }
+moltis-media    = { path = "../media" }
 matrix-sdk      = { version = "0.16", default-features = false, features = ["markdown", "native-tls"] }
+base64           = { workspace = true }
+mime             = "0.3"
 
 async-trait  = "0.1"
 secrecy      = { version = "0.8", features = ["serde"] }

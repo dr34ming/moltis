@@ -6682,9 +6682,12 @@ name = "moltis-matrix"
 version = "0.10.14"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "matrix-sdk",
+ "mime",
  "moltis-channels",
  "moltis-common",
+ "moltis-media",
  "secrecy 0.8.0",
  "serde",
  "serde_json",
